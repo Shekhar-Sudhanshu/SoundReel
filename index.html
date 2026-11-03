@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>SoundReel</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Pacifico&family=Bebas+Neue&family=Playfair+Display:wght@700;800&family=Caveat:wght@600;700&family=Poppins:wght@600;800&family=Lobster&family=Anton&family=Righteous&family=Dancing+Script:wght@700&family=Permanent+Marker&family=Orbitron:wght@800&family=Abril+Fatface&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <main>
+        <h1>Turn your singing into a reel</h1>
+        <p class="sub">Upload your audio, pick a look, and download a vertical video that is ready for Instagram.
+            Nothing leaves your device.</p>
+
+        <div class="grid">
+            <section class="panel" aria-label="Controls">
+                <div><label for="file">Audio file</label><input id="file" type="file" accept="audio/*">
+                    <div class="msg" id="fmsg">MP3, WAV, M4A or similar.</div>
+                </div>
+                <div class="row">
+                    <div><label for="title">Song title</label><input id="title" type="text" placeholder="Tum Hi Ho">
+                    </div>
+                    <div><label for="name">Your handle</label><input id="name" type="text" placeholder="@yourname">
+                    </div>
+                </div>
+                <div class="row">
+                    <div><label for="start">Start (seconds)</label><input id="start" type="number" min="0" value="0"
+                            step="1"></div>
+                    <div><label for="len">Length (max 90)</label><input id="len" type="number" min="1" max="90"
+                            value="30" step="1"></div>
+                </div>
+                <div><span class="lab">Animation</span>
+                    <div class="chips" id="styles">
+                        <button class="chip" data-v="bars" aria-pressed="true">Bars</button>
+                        <button class="chip" data-v="circle" aria-pressed="false">Circle</button>
+                        <button class="chip" data-v="wave" aria-pressed="false">Wave</button>
+                        <button class="chip" data-v="dots" aria-pressed="false">Dots</button>
+                        <button class="chip" data-v="rings" aria-pressed="false">Rings</button>
+                        <button class="chip" data-v="hill" aria-pressed="false">Mountain</button>
+                        <button class="chip" data-v="vinyl" aria-pressed="false">Vinyl</button>
+                        <button class="chip" data-v="insta" aria-pressed="false">Instagram</button>
+                    </div>
+                </div>
+                <div><span class="lab">Font</span>
+                    <div class="chips" id="fonts"></div>
+                </div>
+                <div><span class="lab">Colors</span>
+                    <div class="chips" id="themes"></div>
+                </div>
+                <div><label for="bg">Background photo (optional)</label><input id="bg" type="file" accept="image/*">
+                </div>
+                <div class="row">
+                    <button class="btn alt" id="prev" disabled>Preview</button>
+                    <button class="btn" id="make" disabled>Create reel</button>
+                    <button class="btn alt" id="reset" title="Clear everything and start over">Reset</button>
+                </div>
+                <div class="msg" id="msg" role="status"></div>
+
+            </section>
+            <div class="stage"><canvas id="cv" width="540" height="960" aria-label="Reel preview"></canvas></div>
+        </div>
+    </main>
+    <dialog id="done" aria-labelledby="d-title">
+        <div class="dlg">
+            <video id="vid" controls playsinline></video>
+            <div class="dinfo">
+                <button class="x" id="x" aria-label="Close">×</button>
+                <div class="tag">Your reel is ready</div>
+                <h2 id="d-title">Your reel</h2>
+                <dl>
+                    <div>
+                        <dt>Format</dt>
+                        <dd id="d-fmt"></dd>
+                    </div>
+                    <div>
+                        <dt>Length</dt>
+                        <dd id="d-len"></dd>
+                    </div>
+                    <div>
+                        <dt>Size</dt>
+                        <dd id="d-size"></dd>
+                    </div>
+                    <div>
+                        <dt>Resolution</dt>
+                        <dd>540 × 960 (9:16)</dd>
+                    </div>
+                </dl>
+                <a class="btn" id="dl">Download video</a>
+                <button class="btn alt" id="back">Back to editing</button>
+                <div class="small" id="fmt"></div>
+            </div>
+        </div>
+    </dialog>
+    <script src="script.js"></script>
+</body>
+
+</html>
