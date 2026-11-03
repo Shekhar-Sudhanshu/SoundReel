@@ -624,3 +624,81 @@ dialog#done::backdrop {
     border: 0;
     box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--acc)
 }
+
+textarea {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    color: var(--ink);
+    border: 1.5px solid transparent;
+    font: inherit;
+    resize: vertical;
+    min-height: 110px;
+    transition: border-color .15s
+}
+
+textarea:focus {
+    border-color: var(--acc);
+    outline: none
+}
+
+.cust {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px
+}
+
+.cust[hidden] {
+    display: none
+}
+
+.cp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    border-radius: 12px;
+    padding: 8px 10px
+}
+
+.cp input {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+    flex: none
+}
+
+.cp input::-webkit-color-swatch-wrapper {
+    padding: 0
+}
+
+.cp input::-webkit-color-swatch {
+    border: 0;
+    border-radius: 50%
+}
+
+.cp input::-moz-color-swatch {
+    border: 0;
+    border-radius: 50%
+}
+
+#c-rand {
+    grid-column: 1/-1
+}
+
+@media(max-width:420px) {
+    .cust {
+        grid-template-columns: 1fr
+    }
+}

@@ -35,6 +35,20 @@
                     <div><label for="len">Length (max 90)</label><input id="len" type="number" min="1" max="90"
                             value="30" step="1"></div>
                 </div>
+                <div><label for="sub">Subtitle (optional)</label><input id="sub" type="text"
+                        placeholder="Cover version, original by..."></div>
+                <div><span class="lab">Lyrics</span>
+                    <textarea id="lyr" rows="6"
+                        placeholder="One line per row.&#10;Timing is optional: [0:12.5] Your line here"></textarea>
+                    <div class="chips" id="lyrmode" style="margin-top:10px"><button class="chip" data-m="off"
+                            aria-pressed="false">Off</button><button class="chip" data-m="captions"
+                            aria-pressed="false">Captions</button><button class="chip" data-m="karaoke"
+                            aria-pressed="true">Karaoke</button></div>
+                    <button class="btn alt" id="sync" type="button" style="margin-top:12px;width:100%">Tap to sync
+                        lyrics</button>
+                    <div class="small" style="margin-top:8px">Without timing, lines are spread evenly across the clip.
+                        To time them, press Tap to sync and tap each time a new line starts.</div>
+                </div>
                 <div><span class="lab">Audio</span>
                     <div class="rng"><label for="vol">Volume boost</label><output id="vol-o">100%</output><input
                             id="vol" type="range" min="25" max="300" step="5" value="100"></div>
@@ -62,8 +76,26 @@
                 <div><span class="lab">Font</span>
                     <div class="chips" id="fonts"></div>
                 </div>
+                <div><span class="lab">Background animation</span>
+                    <div class="chips" id="bganim"><button class="chip" data-b="none"
+                            aria-pressed="true">None</button><button class="chip" data-b="particles"
+                            aria-pressed="false">Particles</button><button class="chip" data-b="notes"
+                            aria-pressed="false">Music notes</button><button class="chip" data-b="bokeh"
+                            aria-pressed="false">Bokeh</button><button class="chip" data-b="aurora"
+                            aria-pressed="false">Aurora</button><button class="chip" data-b="pulse"
+                            aria-pressed="false">Pulse</button></div>
+                </div>
                 <div><span class="lab">Colors</span>
                     <div class="chips" id="themes"></div>
+                    <div class="cust" id="custom" hidden>
+                        <label class="cp"><input type="color" id="c-a" value="#1b1028"><span>Background
+                                top</span></label>
+                        <label class="cp"><input type="color" id="c-b" value="#6b1f55"><span>Background
+                                bottom</span></label>
+                        <label class="cp"><input type="color" id="c-c" value="#ff5c8a"><span>Main color</span></label>
+                        <label class="cp"><input type="color" id="c-d" value="#ffc24b"><span>Accent color</span></label>
+                        <button class="chip" id="c-rand" type="button">Surprise me</button>
+                    </div>
                 </div>
                 <div><label for="bg">Background photo (optional)</label><input id="bg" type="file" accept="image/*">
                 </div>
