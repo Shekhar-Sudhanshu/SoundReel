@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>SoundReel</title>
+    <title>Voice to Reel</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Pacifico&family=Bebas+Neue&family=Playfair+Display:wght@700;800&family=Caveat:wght@600;700&family=Poppins:wght@600;800&family=Lobster&family=Anton&family=Righteous&family=Dancing+Script:wght@700&family=Permanent+Marker&family=Orbitron:wght@800&family=Abril+Fatface&display=swap"
         rel="stylesheet">
@@ -19,7 +19,8 @@
 
         <div class="grid">
             <section class="panel" aria-label="Controls">
-                <div><label for="file">Audio file</label><input id="file" type="file" accept="audio/*">
+                <div><label for="file">Audio file</label><input id="file" type="file"
+                        accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.mp4,.mov,.caf,.aif,.aiff,.flac,.ogg,.opus,.webm">
                     <div class="msg" id="fmsg">MP3, WAV, M4A or similar.</div>
                 </div>
                 <div class="row">
@@ -33,6 +34,18 @@
                             step="1"></div>
                     <div><label for="len">Length (max 90)</label><input id="len" type="number" min="1" max="90"
                             value="30" step="1"></div>
+                </div>
+                <div><span class="lab">Audio</span>
+                    <div class="rng"><label for="vol">Volume boost</label><output id="vol-o">100%</output><input
+                            id="vol" type="range" min="25" max="300" step="5" value="100"></div>
+                    <div class="rng"><label for="bass">Bass boost</label><output id="bass-o">0 dB</output><input
+                            id="bass" type="range" min="0" max="12" step="1" value="0"></div>
+                    <div class="rng"><label for="fin">Fade in</label><output id="fin-o">0 s</output><input id="fin"
+                            type="range" min="0" max="5" step="0.5" value="0"></div>
+                    <div class="rng"><label for="fout">Fade out</label><output id="fout-o">0 s</output><input id="fout"
+                            type="range" min="0" max="5" step="0.5" value="0"></div>
+                    <label class="chk"><input type="checkbox" id="loud"> Loudness boost <span class="small">evens out
+                            quiet and loud parts</span></label>
                 </div>
                 <div><span class="lab">Animation</span>
                     <div class="chips" id="styles">

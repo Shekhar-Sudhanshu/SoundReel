@@ -38,9 +38,9 @@ $('file').onchange = async e => {
     $('fmsg').textContent = 'Reading audio…';
     try {
         actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-        buf = await actx.decodeAudioData(await f.arrayBuffer());
-        const d = Math.floor(buf.duration); $('len').value = Math.min(30, d); $('len').max = Math.min(90, d); $('start').max = Math.max(0, d - 1);
-        $('fmsg').textContent = `Loaded ${f.name} (${d}s). Pick the part you want.`;
+        const ab = await f.arrayBuffer(); buf = await new Promise((res, rej) => { const p = actx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej) });
+        const d = Math.ceil(buf.duration); $('len').value = Math.min(90, d); $('len').max = Math.min(90, d); $('start').value = 0; $('start').max = Math.max(0, d - 1);
+        $('fmsg').textContent = `Loaded ${f.name} (${d}s).${d > 90 ? ' It is longer than 90s, so choose the part you want (max 90s).' : ' The full clip is selected. You can trim it below.'}`;
         $('prev').disabled = $('make').disabled = false;
         if (!$('title').value) $('title').value = f.name.replace(/\.[^.]+$/, ''); idle();
     } catch (err) { $('fmsg').textContent = 'Could not read that file. Try an MP3 or WAV.' }
@@ -117,10 +117,10 @@ function stop() { cancelAnimationFrame(raf); if (cur) { try { cur.src.stop() } c
 async function run(record) {
     stop(); await actx.resume();
     const start = Math.max(0, +$('start').value || 0), len = Math.min(90, Math.max(1, +$('len').value || 30), buf.duration - start);
-    const src = actx.createBufferSource(); src.buffer = buf; const an = actx.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = .78; src.connect(an);
+    const src = actx.createBufferSource(); src.buffer = buf; const an = actx.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = .78; src.connect(an); const out = buildChain(src, len);
     const fb = new Uint8Array(an.frequencyBinCount), tb = new Uint8Array(an.fftSize); let rec = null, chunks = [], mime = '';
     if (record) {
-        const dest = actx.createMediaStreamDestination(); an.connect(dest);
+        const dest = actx.createMediaStreamDestination(); out.connect(dest);
         const st = cv.captureStream(30); dest.stream.getAudioTracks().forEach(t => st.addTrack(t));
         mime = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
         rec = new MediaRecorder(st, mime ? { mimeType: mime, videoBitsPerSecond: 5e6 } : {}); rec.ondataavailable = e => e.data.size && chunks.push(e.data);
@@ -132,7 +132,7 @@ async function run(record) {
         };
         rec.start(); if ($('done').open) $('done').close()
     }
-    else an.connect(actx.destination);
+    else out.connect(actx.destination);
     if (record) { $('make').disabled = $('prev').disabled = $('reset').disabled = true } else { $('make').disabled = true; previewing = true; $('prev').textContent = 'Stop preview' }
     $('msg').textContent = record ? 'Recording in real time. Keep this tab open.' : 'Playing preview…';
     const t0 = actx.currentTime; cur = { src }; src.start(0, start, len);
@@ -151,11 +151,26 @@ function resetAll() {
     $('fmsg').textContent = 'MP3, WAV, M4A or similar.'; $('msg').textContent = '';
     $('prev').textContent = 'Preview'; $('prev').disabled = $('make').disabled = true;
     if ($('done').open) $('done').close(); $('vid').removeAttribute('src'); $('vid').load();
-    theme = THEMES[0]; style = 'bars'; FNT = FONTS[0];
+    theme = THEMES[0]; style = 'bars'; FNT = FONTS[0]; $('vol').value = 100; $('bass').value = 0; $('fin').value = 0; $('fout').value = 0; $('loud').checked = false; syncOut();
     [...$('themes').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));
     [...$('styles').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.v === 'bars'));
     [...$('fonts').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));
     idle()
+}
+function syncOut() { [['vol', '%'], ['bass', ' dB'], ['fin', ' s'], ['fout', ' s']].forEach(([i, u]) => $(i + '-o').textContent = $(i).value + u) }
+['vol', 'bass', 'fin', 'fout'].forEach(i => $(i).oninput = syncOut); syncOut();
+$('start').oninput = () => { if (!buf) return; const r = Math.ceil(buf.duration - (+$('start').value || 0)); if (+$('len').value > r) $('len').value = Math.max(1, r) };
+function buildChain(src, len) {
+    const vol = (+$('vol').value || 100) / 100, t = actx.currentTime, fi = Math.min(+$('fin').value || 0, len / 2), fo = Math.min(+$('fout').value || 0, len / 2), g1 = actx.createGain();
+    g1.gain.setValueAtTime(fi > 0 ? 0 : vol, t);
+    if (fi > 0) g1.gain.linearRampToValueAtTime(vol, t + fi);
+    if (fo > 0) { g1.gain.setValueAtTime(vol, t + len - fo); g1.gain.linearRampToValueAtTime(0, t + len) }
+    src.connect(g1); let n = g1;
+    const bass = +$('bass').value || 0;
+    if (bass) { const f = actx.createBiquadFilter(); f.type = 'lowshelf'; f.frequency.value = 150; f.gain.value = bass; n.connect(f); n = f }
+    if ($('loud').checked) { const c = actx.createDynamicsCompressor(); c.threshold.value = -30; c.knee.value = 20; c.ratio.value = 6; c.attack.value = .003; c.release.value = .2; n.connect(c); const mk = actx.createGain(); mk.gain.value = 1.8; c.connect(mk); n = mk }
+    const lim = actx.createDynamicsCompressor(); lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = .001; lim.release.value = .1; n.connect(lim);
+    return lim
 }
 $('reset').onclick = resetAll;
 $('done').addEventListener('close', () => $('vid').pause());
