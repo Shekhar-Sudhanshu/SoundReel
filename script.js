@@ -38,7 +38,7 @@ $('file').onchange = async e => {
     $('fmsg').textContent = 'Reading audio…';
     try {
         actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-        const ab = await f.arrayBuffer(); buf = await new Promise((res, rej) => { const p = actx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej) });
+        const ab = await f.arrayBuffer(); buf = await new Promise((res, rej) => { const p = actx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej) }); calcNorm(buf);
         const d = Math.ceil(buf.duration); $('len').value = Math.min(90, d); $('len').max = Math.min(90, d); $('start').value = 0; $('start').max = Math.max(0, d - 1);
         $('fmsg').textContent = `Loaded ${f.name} (${d}s).${d > 90 ? ' It is longer than 90s, so choose the part you want (max 90s).' : ' The full clip is selected. You can trim it below.'}`;
         $('prev').disabled = $('make').disabled = false;
@@ -71,7 +71,8 @@ function wrap(t, x, y, mw, lh) {
         if (g.measureText(n).width > mw && l) { g.fillText(l, x, yy); l = w; yy += lh } else l = n
     } g.fillText(l, x, yy); return yy
 }
-function frame(freq, time, p) {
+function frame(freq, time, p) { try { frame0(freq, time, p) } catch (err) { if (frameErr++ < 3) { console.error(err); cv.width = W; $('msg').textContent = 'Display problem: ' + (err && err.message ? err.message : err) } } }
+function frame0(freq, time, p) {
     drawBg(); const N = 40; const bins = []; for (let i = 0; i < N; i++) { bins.push((freq ? freq[2 + i * 2] : 12 + 10 * Math.sin(i)) / 255) }
     bgAnim(bins); const gr = g.createLinearGradient(0, H / 2 - 200, 0, H / 2 + 200); gr.addColorStop(0, theme.d); gr.addColorStop(1, theme.c); g.fillStyle = gr; g.strokeStyle = gr; g.lineCap = 'round';
     if (style === 'bars') { const bw = (W - 100) / N; for (let i = 0; i < N; i++) { const h = Math.max(8, bins[i] * 340); g.fillRect(50 + i * bw + 2, H / 2 - h / 2, bw - 4, h) } }
@@ -114,10 +115,19 @@ function idle() { if (!cur) frame(null, null, 0) }
 
 let previewing = false;
 function endPreview() { stop(); previewing = false; $('prev').textContent = 'Preview'; $('prev').disabled = $('make').disabled = false; $('msg').textContent = ''; finishSync(); idle() }
-function stop() { cancelAnimationFrame(raf); pauseVideo(); if (cur) { try { cur.src.stop() } catch (e) { } cur = null } }
+function stop() { runId++; cancelAnimationFrame(raf); pauseVideo(); if (cur) { try { cur.src.stop() } catch (e) { } cur = null } }
 async function run(record) {
-    stop(); await actx.resume();
-    const start = Math.max(0, +$('start').value || 0), len = Math.min(90, Math.max(1, +$('len').value || 30), buf.duration - start);
+    if (starting) return; starting = true;
+    try { await run0(record) } catch (err) { abortRun('Something went wrong' + (err && err.message ? ': ' + err.message : '') + '. Please try again.') } finally { starting = false }
+}
+async function run0(record) {
+    if (!buf) throw new Error('upload or record audio first');
+    stop(); const before = runId;
+    await Promise.race([actx.resume(), new Promise(r => setTimeout(r, 1500))]);
+    if (runId !== before) return;
+    const my = ++runId; frameErr = 0;
+    const start = Math.min(Math.max(0, +$('start').value || 0), Math.max(0, buf.duration - 1)), len = Math.min(90, Math.max(1, +$('len').value || 30), buf.duration - start);
+    if (!(len > 0)) throw new Error('the selected clip is empty, check the start and length');
     const src = actx.createBufferSource(); src.buffer = buf; const an = actx.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = .78; lyr = parseLyrics(len); curLen = len; src.connect(an); const out = buildChain(src, len);
     const fb = new Uint8Array(an.frequencyBinCount), tb = new Uint8Array(an.fftSize); let rec = null, chunks = [], mime = '';
     if (record) {
@@ -131,20 +141,26 @@ async function run(record) {
             $('fmt').textContent = ext === 'mp4' ? 'MP4 is ready to post.' : 'Your browser made a WebM file. Open this page in Chrome on a computer for MP4, or convert it free at cloudconvert.com before posting.';
             $('msg').textContent = 'Done! Your reel is ready.'; $('reset').disabled = false; $('sync').disabled = false; $('rec').disabled = false; $('make').disabled = $('prev').disabled = false
         };
-        rec.start(); if ($('done').open) $('done').close()
+        curRec = rec; rec.start(); if ($('done').open) $('done').close()
     }
     else out.connect(actx.destination);
     if (record) { $('rec').disabled = $('sync').disabled = $('make').disabled = $('prev').disabled = $('reset').disabled = true } else { $('make').disabled = true; previewing = true; $('prev').textContent = 'Stop preview' }
     $('msg').textContent = record ? 'Recording in real time. Keep this tab open.' : 'Playing preview…';
     const t0 = actx.currentTime; runT0 = t0; cur = { src }; src.start(0, start, len); startVideo();
+    const wall0 = performance.now();
     const tick = () => {
-        const t = actx.currentTime - t0; syncVideo(t); an.getByteFrequencyData(fb); an.getByteTimeDomainData(tb); frame(fb, tb, Math.min(1, t / len));
-        if (t >= len) { cur = null; frame(fb, tb, 1); pauseVideo(); if (rec) rec.stop(); else { endPreview() } return }
+        if (my !== runId) return;
+        try {
+            const t = actx.currentTime - t0;
+            if (t < .05 && performance.now() - wall0 > 2500) throw new Error('the audio did not start playing, tap Preview again');
+            syncVideo(t); an.getByteFrequencyData(fb); an.getByteTimeDomainData(tb); frame(fb, tb, Math.min(1, t / len));
+            if (t >= len) { cur = null; frame(fb, tb, 1); pauseVideo(); if (rec) rec.stop(); else { endPreview() } return }
+        } catch (err) { abortRun('Something went wrong' + (err && err.message ? ': ' + err.message : '') + '. Please try again.'); return }
         raf = requestAnimationFrame(tick)
     }; tick()
 }
 $('prev').onclick = () => { if (previewing) endPreview(); else run(false) }; $('make').onclick = () => run(true);
-let lyrLook = 'classic', lyrAnim = 'fade', lyrPos = 'bottom', bgVid = false, vUrl = null, vHold = false, lyrMode = 'karaoke', bgMode = 'none', lyr = [], curLen = 30, syncing = false, syncIdx = 0, syncLines = [], syncStamps = [], runT0 = 0;
+let starting = false, curRec = null, runId = 0, frameErr = 0, normGain = 1, lyrLook = 'classic', lyrAnim = 'fade', lyrPos = 'bottom', bgVid = false, vUrl = null, vHold = false, lyrMode = 'karaoke', bgMode = 'none', lyr = [], curLen = 30, syncing = false, syncIdx = 0, syncLines = [], syncStamps = [], runT0 = 0;
 const bgv = $('bgv'), vsnap = document.createElement('canvas'); vsnap.width = W; vsnap.height = H;
 const R = (i, k) => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x) };
 const fnt = s => `${FNT.w} ${s}px "${FNT.f}",sans-serif`;
@@ -287,7 +303,7 @@ function stopRec() {
     const n = st.chunks.reduce((a, c) => a + c.length, 0);
     if (n < actx.sampleRate * .5) { $('rec-t').textContent = ''; $('prev').disabled = $('make').disabled = !buf; $('fmsg').textContent = 'That was too short. Please try again.'; return }
     const ab = actx.createBuffer(1, n, actx.sampleRate), ch = ab.getChannelData(0); let o = 0; st.chunks.forEach(c => { ch.set(c, o); o += c.length });
-    buf = ab; $('file').value = '';
+    buf = ab; calcNorm(ab); $('file').value = '';
     const d = Math.ceil(ab.duration); $('len').value = Math.min(90, d); $('len').max = Math.min(90, d); $('start').value = 0; $('start').max = Math.max(0, d - 1);
     $('prev').disabled = $('make').disabled = false;
     if (!$('title').value) $('title').value = 'My recording';
@@ -302,10 +318,11 @@ function coverTo(c, src, sw, sh) { const q = Math.max(W / sw, H / sh); c.drawIma
 function vStart() { return Math.min(Math.max(0, +$('vs').value || 0), Math.max(0, (bgv.duration || 0) - .5)) }
 function vEnd() { const d = bgv.duration || 0, e = +$('ve').value || d; return Math.min(d, Math.max(e, vStart() + .5)) }
 function snapVideo() { if (bgv.readyState >= 2 && bgv.videoWidth) { coverTo(vsnap.getContext('2d'), bgv, bgv.videoWidth, bgv.videoHeight); vHold = true } }
-function startVideo() { if (!bgVid) return; snapVideo(); bgv.currentTime = vStart(); bgv.play().catch(() => { }) }
+function vplay() { const q = bgv.play(); if (q && q.catch) q.catch(() => { }) }
+function startVideo() { if (!bgVid) return; snapVideo(); bgv.currentTime = vStart(); vplay() }
 function syncVideo(t) {
-    if (!bgVid) return; const vs = vStart(), ve = vEnd(), seg = Math.max(.5, ve - vs), want = vs + (t % seg);
-    if (bgv.paused) bgv.play().catch(() => { });
+    if (!bgVid) return; const vs = vStart(), ve = vEnd(), seg = Math.max(.5, ve - vs), want = vs + (t % seg); if (!isFinite(want)) return;
+    if (bgv.paused) vplay();
     if (Math.abs(bgv.currentTime - want) > .6 || bgv.currentTime >= ve) { snapVideo(); bgv.currentTime = want }
 }
 function pauseVideo() { if (!bgVid) return; snapVideo(); bgv.pause(); bgv.currentTime = vStart() }
@@ -335,7 +352,7 @@ function resetAll() {
     $('fmsg').textContent = 'MP3, WAV, M4A or similar.'; $('msg').textContent = '';
     $('prev').textContent = 'Preview'; $('prev').disabled = $('make').disabled = true;
     if ($('done').open) $('done').close(); $('vid').removeAttribute('src'); $('vid').load();
-    theme = THEMES[0]; style = 'bars'; FNT = FONTS[0]; $('vol').value = 100; $('bass').value = 0; $('fin').value = 0; $('fout').value = 0; $('loud').checked = false; syncOut(); $('lyr').value = ''; $('sub').value = ''; syncing = false; $('custom').hidden = true; customInit = false; $('rec-t').textContent = ''; clearVideo(); $('vdim').value = 35; $('vdim-o').textContent = '35%'; lyrLook = 'classic'; lyrAnim = 'fade'; lyrPos = 'bottom'; sp('lyrlook', 'l', 'classic'); sp('lyranim', 'a', 'fade'); sp('lyrpos', 'p', 'bottom'); bgMode = 'none'; lyrMode = 'karaoke';[...$('bganim').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));[...$('lyrmode').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.m === 'karaoke')); updSyncBtn();
+    theme = THEMES[0]; style = 'bars'; FNT = FONTS[0]; $('vol').value = 100; $('bass').value = 0; $('fin').value = 0; $('fout').value = 0; $('loud').checked = false; $('norm').checked = true; normGain = 1; $('normmsg').textContent = ''; syncOut(); $('lyr').value = ''; $('sub').value = ''; syncing = false; $('custom').hidden = true; customInit = false; $('rec-t').textContent = ''; clearVideo(); $('vdim').value = 35; $('vdim-o').textContent = '35%'; lyrLook = 'classic'; lyrAnim = 'fade'; lyrPos = 'bottom'; sp('lyrlook', 'l', 'classic'); sp('lyranim', 'a', 'fade'); sp('lyrpos', 'p', 'bottom'); bgMode = 'none'; lyrMode = 'karaoke';[...$('bganim').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));[...$('lyrmode').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.m === 'karaoke')); updSyncBtn();
     [...$('themes').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));
     [...$('styles').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.v === 'bars'));
     [...$('fonts').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));
@@ -344,8 +361,22 @@ function resetAll() {
 function syncOut() { [['vol', '%'], ['bass', ' dB'], ['fin', ' s'], ['fout', ' s']].forEach(([i, u]) => $(i + '-o').textContent = $(i).value + u) }
 ['vol', 'bass', 'fin', 'fout'].forEach(i => $(i).oninput = syncOut); syncOut();
 $('start').oninput = () => { if (!buf) return; const r = Math.ceil(buf.duration - (+$('start').value || 0)); if (+$('len').value > r) $('len').value = Math.max(1, r) };
+function abortRun(msg) {
+    stop(); previewing = false; syncing = false;
+    if (curRec && curRec.state !== 'inactive') { curRec.onstop = null; try { curRec.stop() } catch (e) { } } curRec = null;
+    try { cv.width = W } catch (e) { }
+    $('prev').textContent = 'Preview'; $('prev').disabled = $('make').disabled = !buf; $('reset').disabled = false; $('sync').disabled = false; $('rec').disabled = false;
+    $('msg').textContent = msg; updSyncBtn(); idle()
+}
+function calcNorm(ab) {
+    const n = ab.length, B = 2048, pk = [];
+    for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0, k = 0; i < n; i += B, k++) { let m = 0; const e = Math.min(n, i + B); for (let j = i; j < e; j++) { const v = d[j] < 0 ? -d[j] : d[j]; if (v > m) m = v } if (!(pk[k] > m)) pk[k] = m } }
+    pk.sort((a, b) => a - b); const ref = pk[Math.min(pk.length - 1, Math.floor(pk.length * .995))] || 0;
+    normGain = ref > .001 ? Math.min(30, Math.max(1, .89 / ref)) : 1;
+    $('normmsg').textContent = normGain > 1.05 ? `Quiet audio detected. Auto leveling raises it by about ${Math.round(20 * Math.log10(normGain))} dB.` : 'The level is already good, so no boost is needed.'
+}
 function buildChain(src, len) {
-    const vol = (+$('vol').value || 100) / 100, t = actx.currentTime, fi = Math.min(+$('fin').value || 0, len / 2), fo = Math.min(+$('fout').value || 0, len / 2), g1 = actx.createGain();
+    const vol = ((+$('vol').value || 100) / 100) * ($('norm').checked ? normGain : 1), t = actx.currentTime, fi = Math.min(+$('fin').value || 0, len / 2), fo = Math.min(+$('fout').value || 0, len / 2), g1 = actx.createGain();
     g1.gain.setValueAtTime(fi > 0 ? 0 : vol, t);
     if (fi > 0) g1.gain.linearRampToValueAtTime(vol, t + fi);
     if (fo > 0) { g1.gain.setValueAtTime(vol, t + len - fo); g1.gain.linearRampToValueAtTime(0, t + len) }
@@ -353,6 +384,7 @@ function buildChain(src, len) {
     const bass = +$('bass').value || 0;
     if (bass) { const f = actx.createBiquadFilter(); f.type = 'lowshelf'; f.frequency.value = 150; f.gain.value = bass; n.connect(f); n = f }
     if ($('loud').checked) { const c = actx.createDynamicsCompressor(); c.threshold.value = -30; c.knee.value = 20; c.ratio.value = 6; c.attack.value = .003; c.release.value = .2; n.connect(c); const mk = actx.createGain(); mk.gain.value = 1.8; c.connect(mk); n = mk }
+    if (!(vol > 1.001 || bass > 0 || $('loud').checked)) return n;
     const lim = actx.createDynamicsCompressor(); lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = .001; lim.release.value = .1; n.connect(lim);
     return lim
 }

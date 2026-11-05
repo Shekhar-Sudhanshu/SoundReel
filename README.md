@@ -1,6 +1,6 @@
 # Voice to Reel
 
-**Version 3.0**
+**Version 3.1**
 
 Turn an audio clip into a vertical, Instagram-ready reel with an animated visual. Upload or record your singing, pick a look, add lyrics, and download a video. No recording yourself on camera, no sign-up, no server.
 
@@ -19,13 +19,27 @@ Everything runs in the browser. Your audio, video and recordings never leave you
 - Optional background photo
 - 12 preset color themes, plus a custom color creator with four color pickers and a Surprise me button
 - 13 font styles for the title, subtitle, handle and lyrics
-- Audio settings: volume boost, bass boost, fade in, fade out and loudness boost
+- Audio settings: auto volume leveling, volume boost, bass boost, fade in, fade out and loudness boost
 - Preview with a stop button before creating the reel
 - Result pop-up with the video, format, length, size and a download button
 - Reset button to clear everything and start over
 - Responsive layout with light and dark page backgrounds
 
 ## Changelog
+
+### 3.1
+
+**Fixes**
+- Low volume on uploaded and recorded audio:
+  - Added **Auto volume leveling** (on by default). Quiet audio is measured and raised to a normal level, by up to about 30 dB, and a note shows how much. Audio that is already loud is left unchanged
+  - Recordings were very quiet because the recorder turns off automatic gain to keep singing natural. Auto volume leveling now corrects this
+  - The limiter is now only used when it is needed (volume above 100%, bass boost, loudness boost, or leveling a quiet file). At default settings the audio passes through at its original level
+- Preview and Create reel sometimes stopped working after changing settings, leaving the buttons disabled and the preview showing only a bar at the bottom:
+  - Pressing Preview or Create reel twice quickly, or while a start was in progress, could start two playbacks at once. A second press is now ignored, and a stopped or reset playback can no longer keep running
+  - If anything fails while starting or during playback, the page now restores the buttons and the preview and shows a message such as "Something went wrong: ..."
+  - A drawing error on one frame no longer freezes the preview. The canvas is cleared and playback continues, and a "Display problem: ..." message is shown if it keeps happening
+  - If the audio never starts, the page gives up after about 2.5 seconds with a message instead of waiting forever
+  - A start time beyond the end of the audio is now clamped to a valid value
 
 ### 3.0
 
@@ -81,7 +95,7 @@ Everything runs in the browser. Your audio, video and recordings never leave you
 
 1. The audio is either decoded from your file with the Web Audio API, or captured from the microphone as raw samples by the built-in recorder.
 2. An analyser reads the frequency data of the original audio while it plays, so the animation does not change size when you change the volume.
-3. The audio also passes through the audio settings chain: gain with fades, optional bass boost, optional loudness compressor and a limiter.
+3. The audio also passes through the audio settings chain: gain (including auto volume leveling) with fades, optional bass boost, optional loudness compressor, and a limiter that is only added when the level is being raised.
 4. Each frame is drawn on a 540 x 960 (9:16) `<canvas>` in layers: background gradient, photo or video, background animation, main animation, title and subtitle, then lyrics.
 5. A hidden, muted `<video>` element supplies the background video frames. It is kept in sync with the audio and looped as needed.
 6. `canvas.captureStream()` and `MediaRecorder` record the canvas together with the processed audio into a video file.
@@ -131,7 +145,7 @@ Serve it over HTTPS (all of the hosts above do this automatically). Browsers onl
 1. Upload your audio file, or press **Record voice**, allow microphone access, sing, and press **Stop recording**. The full clip is selected by default.
 2. Enter a song title, an optional subtitle and your handle. Change the start time and length if you want to trim the clip.
 3. Paste or type your lyrics, one line per row. Choose Karaoke, Captions or Off, then pick a lyric style, animation and position. To time the lyrics, press **Tap to sync lyrics** and tap whenever a new line starts, or type times like `[0:12.5]` at the start of lines. Times are counted from the start of the selected clip.
-4. Adjust the audio settings if needed.
+4. Adjust the audio settings if needed. Auto volume leveling is on by default and raises quiet audio, which is especially useful for voice recordings.
 5. Choose an animation, a background animation, a color theme and a font. Use the **+** swatch to create your own colors.
 6. Add a background photo or a background video. For a video, set the start and end points and the dimming. Choosing a photo replaces a video, and the other way round.
 7. Press **Preview** to check the look and sound. Press **Stop preview** to end it early. Audio settings apply the next time you press Preview or Create reel.
@@ -144,6 +158,7 @@ Serve it over HTTPS (all of the hosts above do this automatically). Browsers onl
 - Some browsers export **WebM** instead. If your video is WebM, convert it to MP4 with any free converter before posting to Instagram.
 - Recording on phones is less reliable. Recent Chrome for Android should work, and iOS support depends on the version. Make a short test reel first.
 - Recording happens in real time and stops or goes silent if the tab is closed, the screen locks or the browser throttles the page. The same applies to the voice recorder, especially on iPhone.
+- If something fails while previewing or recording, a message appears under the buttons. Please include it when you report a bug.
 - The voice recorder captures your voice only. If you play music out loud while recording, the microphone will pick it up too.
 - Background videos work best as short MP4 (H.264) files. Large or high-resolution videos can make recording choppy on slower devices, and some video formats may not load in every browser.
 - When a short video loops, the browser may pause briefly while it jumps back to the start.
@@ -164,7 +179,9 @@ Open `script.js` and look for these arrays and functions:
 - `parseLyrics()`: change how lyric timing is read.
 - `startRec()` and `stopRec()`: the voice recorder.
 - `syncVideo()`: how the background video is kept in sync and looped.
+- `calcNorm()`: measures the loudness of the loaded audio for auto volume leveling.
 - `buildChain()`: the audio settings chain. Add or change audio effects here.
+- `run()`, `run0()` and `abortRun()`: starting playback or recording, and recovering when something goes wrong.
 
 ## Contributing
 
