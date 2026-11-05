@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Voice to Reel</title>
+    <title>SoundReel</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Pacifico&family=Bebas+Neue&family=Playfair+Display:wght@700;800&family=Caveat:wght@600;700&family=Poppins:wght@600;800&family=Lobster&family=Anton&family=Righteous&family=Dancing+Script:wght@700&family=Permanent+Marker&family=Orbitron:wght@800&family=Abril+Fatface&display=swap"
         rel="stylesheet">
@@ -22,6 +22,11 @@
                 <div><label for="file">Audio file</label><input id="file" type="file"
                         accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.mp4,.mov,.caf,.aif,.aiff,.flac,.ogg,.opus,.webm">
                     <div class="msg" id="fmsg">MP3, WAV, M4A or similar.</div>
+                    <div class="rec"><button class="btn alt" id="rec" type="button">● Record voice</button><span
+                            class="tm" id="rec-t"></span>
+                        <label class="chk"><input type="checkbox" id="rec-ns"> Reduce background noise</label>
+                        <div class="meter" id="meter" aria-hidden="true"><i></i></div>
+                    </div>
                 </div>
                 <div class="row">
                     <div><label for="title">Song title</label><input id="title" type="text" placeholder="Tum Hi Ho">
@@ -44,7 +49,27 @@
                             aria-pressed="false">Off</button><button class="chip" data-m="captions"
                             aria-pressed="false">Captions</button><button class="chip" data-m="karaoke"
                             aria-pressed="true">Karaoke</button></div>
-                    <button class="btn alt" id="sync" type="button" style="margin-top:12px;width:100%">Tap to sync
+                    <span class="lab" style="margin-top:16px">Lyric style</span>
+                    <div class="chips" id="lyrlook"><button class="chip" data-l="classic"
+                            aria-pressed="true">Classic</button><button class="chip" data-l="boxed"
+                            aria-pressed="false">Boxed</button><button class="chip" data-l="highlight"
+                            aria-pressed="false">Highlight</button><button class="chip" data-l="neon"
+                            aria-pressed="false">Neon</button><button class="chip" data-l="outline"
+                            aria-pressed="false">Outline</button></div>
+                    <span class="lab" style="margin-top:14px">Lyric animation</span>
+                    <div class="chips" id="lyranim"><button class="chip" data-a="none"
+                            aria-pressed="false">None</button><button class="chip" data-a="fade"
+                            aria-pressed="true">Fade</button><button class="chip" data-a="slide"
+                            aria-pressed="false">Slide up</button><button class="chip" data-a="pop"
+                            aria-pressed="false">Pop</button><button class="chip" data-a="type"
+                            aria-pressed="false">Typewriter</button><button class="chip" data-a="words"
+                            aria-pressed="false">Word by word</button></div>
+                    <span class="lab" style="margin-top:14px">Lyric position</span>
+                    <div class="chips" id="lyrpos"><button class="chip" data-p="top"
+                            aria-pressed="false">Top</button><button class="chip" data-p="middle"
+                            aria-pressed="false">Middle</button><button class="chip" data-p="bottom"
+                            aria-pressed="true">Bottom</button></div>
+                    <button class="btn alt" id="sync" type="button" style="margin-top:16px;width:100%">Tap to sync
                         lyrics</button>
                     <div class="small" style="margin-top:8px">Without timing, lines are spread evenly across the clip.
                         To time them, press Tap to sync and tap each time a new line starts.</div>
@@ -99,6 +124,21 @@
                 </div>
                 <div><label for="bg">Background photo (optional)</label><input id="bg" type="file" accept="image/*">
                 </div>
+                <div><label for="bgvf">Background video (optional)</label><input id="bgvf" type="file"
+                        accept="video/*,.mp4,.mov,.m4v,.webm">
+                    <div class="msg" id="vmsg">Shorter than the clip? It loops. Its own sound is not used.</div>
+                    <div id="vctl" hidden>
+                        <div class="row">
+                            <div><label for="vs">Video start (s)</label><input id="vs" type="number" min="0" step="0.5"
+                                    value="0"></div>
+                            <div><label for="ve">Video end (s)</label><input id="ve" type="number" min="0.5" step="0.5"
+                                    value="0"></div>
+                        </div>
+                        <div class="rng"><label for="vdim">Video dimming</label><output id="vdim-o">35%</output><input
+                                id="vdim" type="range" min="0" max="80" step="5" value="35"></div>
+                        <button class="btn alt" id="vrm" type="button">Remove video</button>
+                    </div>
+                </div>
                 <div class="row">
                     <button class="btn alt" id="prev" disabled>Preview</button>
                     <button class="btn" id="make" disabled>Create reel</button>
@@ -110,6 +150,8 @@
             <div class="stage"><canvas id="cv" width="540" height="960" aria-label="Reel preview"></canvas></div>
         </div>
     </main>
+    <video id="bgv" muted playsinline preload="auto" aria-hidden="true" tabindex="-1"
+        style="position:fixed;left:-9999px;top:0;width:8px;height:8px;opacity:0;pointer-events:none"></video>
     <dialog id="done" aria-labelledby="d-title">
         <div class="dlg">
             <video id="vid" controls playsinline></video>

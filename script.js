@@ -47,12 +47,13 @@ $('file').onchange = async e => {
 };
 $('bg').onchange = e => {
     const f = e.target.files[0]; if (!f) return; const r = new FileReader();
-    r.onload = () => { const im = new Image(); im.onload = () => { bgImg = im; idle() }; im.src = r.result }; r.readAsDataURL(f)
+    r.onload = () => { const im = new Image(); im.onload = () => { bgImg = im; clearVideo(); idle() }; im.src = r.result }; r.readAsDataURL(f)
 };
 
 function drawBg() {
     const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, theme.a); gr.addColorStop(1, theme.b); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    if (bgImg) {
+    if (bgVid) { if (bgv.readyState >= 2 && bgv.videoWidth) coverTo(g, bgv, bgv.videoWidth, bgv.videoHeight); else if (vHold) g.drawImage(vsnap, 0, 0); g.fillStyle = `rgba(10,5,20,${(+$('vdim').value || 0) / 100})`; g.fillRect(0, 0, W, H) }
+    else if (bgImg) {
         const s = Math.max(W / bgImg.width, H / bgImg.height), w = bgImg.width * s, h = bgImg.height * s; g.drawImage(bgImg, (W - w) / 2, (H - h) / 2, w, h);
         g.fillStyle = 'rgba(10,5,20,.55)'; g.fillRect(0, 0, W, H)
     }
@@ -113,7 +114,7 @@ function idle() { if (!cur) frame(null, null, 0) }
 
 let previewing = false;
 function endPreview() { stop(); previewing = false; $('prev').textContent = 'Preview'; $('prev').disabled = $('make').disabled = false; $('msg').textContent = ''; finishSync(); idle() }
-function stop() { cancelAnimationFrame(raf); if (cur) { try { cur.src.stop() } catch (e) { } cur = null } }
+function stop() { cancelAnimationFrame(raf); pauseVideo(); if (cur) { try { cur.src.stop() } catch (e) { } cur = null } }
 async function run(record) {
     stop(); await actx.resume();
     const start = Math.max(0, +$('start').value || 0), len = Math.min(90, Math.max(1, +$('len').value || 30), buf.duration - start);
@@ -128,22 +129,23 @@ async function run(record) {
             const ext = (rec.mimeType || mime).includes('mp4') ? 'mp4' : 'webm'; const url = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || mime }));
             $('vid').src = url; $('dl').href = url; $('dl').download = (($('title').value || 'my-reel').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'my-reel') + '.' + ext; $('d-fmt').textContent = ext.toUpperCase(); $('d-len').textContent = Math.round(len) + ' sec'; $('d-size').textContent = (chunks.reduce((a, c) => a + c.size, 0) / 1048576).toFixed(1) + ' MB'; $('d-title').textContent = $('title').value || 'Your reel'; $('done').showModal(); $('vid').play().catch(() => { });
             $('fmt').textContent = ext === 'mp4' ? 'MP4 is ready to post.' : 'Your browser made a WebM file. Open this page in Chrome on a computer for MP4, or convert it free at cloudconvert.com before posting.';
-            $('msg').textContent = 'Done! Your reel is ready.'; $('reset').disabled = false; $('sync').disabled = false; $('make').disabled = $('prev').disabled = false
+            $('msg').textContent = 'Done! Your reel is ready.'; $('reset').disabled = false; $('sync').disabled = false; $('rec').disabled = false; $('make').disabled = $('prev').disabled = false
         };
         rec.start(); if ($('done').open) $('done').close()
     }
     else out.connect(actx.destination);
-    if (record) { $('sync').disabled = $('make').disabled = $('prev').disabled = $('reset').disabled = true } else { $('make').disabled = true; previewing = true; $('prev').textContent = 'Stop preview' }
+    if (record) { $('rec').disabled = $('sync').disabled = $('make').disabled = $('prev').disabled = $('reset').disabled = true } else { $('make').disabled = true; previewing = true; $('prev').textContent = 'Stop preview' }
     $('msg').textContent = record ? 'Recording in real time. Keep this tab open.' : 'Playing preview…';
-    const t0 = actx.currentTime; runT0 = t0; cur = { src }; src.start(0, start, len);
+    const t0 = actx.currentTime; runT0 = t0; cur = { src }; src.start(0, start, len); startVideo();
     const tick = () => {
-        const t = actx.currentTime - t0; an.getByteFrequencyData(fb); an.getByteTimeDomainData(tb); frame(fb, tb, Math.min(1, t / len));
-        if (t >= len) { cur = null; frame(fb, tb, 1); if (rec) rec.stop(); else { endPreview() } return }
+        const t = actx.currentTime - t0; syncVideo(t); an.getByteFrequencyData(fb); an.getByteTimeDomainData(tb); frame(fb, tb, Math.min(1, t / len));
+        if (t >= len) { cur = null; frame(fb, tb, 1); pauseVideo(); if (rec) rec.stop(); else { endPreview() } return }
         raf = requestAnimationFrame(tick)
     }; tick()
 }
 $('prev').onclick = () => { if (previewing) endPreview(); else run(false) }; $('make').onclick = () => run(true);
-let lyrMode = 'karaoke', bgMode = 'none', lyr = [], curLen = 30, syncing = false, syncIdx = 0, syncLines = [], syncStamps = [], runT0 = 0;
+let lyrLook = 'classic', lyrAnim = 'fade', lyrPos = 'bottom', bgVid = false, vUrl = null, vHold = false, lyrMode = 'karaoke', bgMode = 'none', lyr = [], curLen = 30, syncing = false, syncIdx = 0, syncLines = [], syncStamps = [], runT0 = 0;
+const bgv = $('bgv'), vsnap = document.createElement('canvas'); vsnap.width = W; vsnap.height = H;
 const R = (i, k) => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x) };
 const fnt = s => `${FNT.w} ${s}px "${FNT.f}",sans-serif`;
 function clipLen() { const s = Math.max(0, +$('start').value || 0); return Math.min(90, Math.max(1, +$('len').value || 30), buf ? buf.duration - s : 90) }
@@ -164,20 +166,50 @@ function bgAnim(bins) {
     else if (bgMode === 'pulse') { const q = g.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, 560); q.addColorStop(0, theme.c); q.addColorStop(1, theme.a); g.globalAlpha = .1 + bass * .45; g.fillStyle = q; g.fillRect(0, 0, W, H) }
     g.restore()
 }
-function put(t, y, size, col, a) { let s = size; g.font = fnt(s); while (g.measureText(t).width > W - 70 && s > 18) { s -= 2; g.font = fnt(s) } const w = g.measureText(t).width, x = W / 2 - w / 2; g.textAlign = 'left'; g.lineJoin = 'round'; g.lineWidth = 7; g.strokeStyle = 'rgba(0,0,0,.55)'; g.globalAlpha = a; g.strokeText(t, x, y); g.fillStyle = col; g.fillText(t, x, y); g.globalAlpha = 1; return { x, w, s } }
+function lum(h) { const n = parseInt(h.slice(1), 16); return (.299 * (n >> 16 & 255) + .587 * (n >> 8 & 255) + .114 * (n & 255)) / 255 }
+function drawLine(t, y, size, o) {
+    o = o || {}; const a = o.a == null ? 1 : o.a, pr = o.prog, full = o.full || t, vis = o.vis == null ? t : o.vis;
+    let s = size; g.font = fnt(s); while (g.measureText(full).width > W - 90 && s > 18) { s -= 2; g.font = fnt(s) }
+    const w = g.measureText(full).width, x = W / 2 - w / 2, cy = y + (o.dy || 0), pad = 18, look = lyrLook, bx = x - pad, by = cy - s * 1.05, bw = w + pad * 2, bh = s * 1.5, tc = lum(theme.c) > .6 ? '#111' : '#fff';
+    g.save(); g.globalAlpha = a;
+    if (o.sc && o.sc !== 1) { const oy = cy - s * .3; g.translate(W / 2, oy); g.scale(o.sc, o.sc); g.translate(-W / 2, -oy) }
+    g.textAlign = 'left'; g.lineJoin = 'round';
+    if (look === 'boxed') { g.fillStyle = 'rgba(0,0,0,.58)'; g.beginPath(); g.roundRect(bx, by, bw, bh, 14); g.fill() }
+    if (look === 'highlight') {
+        g.fillStyle = theme.c; g.globalAlpha = a * (pr == null ? 1 : .4); g.beginPath(); g.roundRect(bx, by, bw, bh, 14); g.fill(); g.globalAlpha = a;
+        if (pr != null) { g.save(); g.beginPath(); g.rect(bx, by, bw * pr, bh); g.clip(); g.fillStyle = theme.c; g.beginPath(); g.roundRect(bx, by, bw, bh, 14); g.fill(); g.restore() }
+    }
+    const paint = c => {
+        if (look === 'neon') { g.shadowColor = theme.c; g.shadowBlur = 22; g.fillStyle = c; g.fillText(vis, x, cy); g.shadowBlur = 8; g.fillText(vis, x, cy); g.shadowBlur = 0 }
+        else if (look === 'outline') { g.lineWidth = 3.5; g.strokeStyle = c; g.strokeText(vis, x, cy) }
+        else if (look === 'highlight') { g.fillStyle = tc; g.fillText(vis, x, cy) }
+        else if (look === 'boxed') { g.fillStyle = c; g.fillText(vis, x, cy) }
+        else { g.lineWidth = 7; g.strokeStyle = 'rgba(0,0,0,.55)'; g.strokeText(vis, x, cy); g.fillStyle = c; g.fillText(vis, x, cy) }
+    };
+    paint(o.kar ? 'rgba(255,255,255,.6)' : '#fff');
+    if (o.kar && pr != null && look !== 'highlight') { g.save(); g.beginPath(); g.rect(x - pad, cy - s * 1.3, w * pr + pad, s * 1.8); g.clip(); paint(theme.c); g.restore() }
+    g.restore(); return { x, w, s }
+}
+function lyrY() { return lyrPos === 'top' ? 300 : lyrPos === 'middle' ? H / 2 + 10 : 775 }
 function drawLyrics(tm, L, len) {
     if (lyrMode === 'off' || !L.length) return;
     let i = -1; for (let k = 0; k < L.length; k++)if (L[k].t <= tm + .001) i = k;
     if (i < 0) return;
     const ln = L[i], nx = L[i + 1]; if (!ln.text) return;
-    const base = Math.min(40, Math.max(26, 34 * FNT.s));
-    if (lyrMode === 'captions') { put(ln.text, 775, base, '#fff', cur ? Math.min(1, (tm - ln.t) / .25 + .05) : 1); return }
-    const end = nx ? nx.t : len, dur = Math.max(.8, Math.min(end - ln.t, 5)), pr = Math.min(1, Math.max(0, (tm - ln.t) / dur));
-    const m = put(ln.text, 775, base, 'rgba(255,255,255,.55)', 1);
-    g.save(); g.beginPath(); g.rect(m.x - 6, 775 - m.s * 1.2, m.w * pr + 6, m.s * 1.7); g.clip(); g.font = fnt(m.s); g.textAlign = 'left'; g.fillStyle = theme.c; g.fillText(ln.text, m.x, 775); g.restore();
-    if (nx && nx.text) put(nx.text, 822, Math.max(20, base * .7), '#fff', .45)
+    const base = Math.min(40, Math.max(26, 34 * FNT.s)), y = lyrY(), age = cur ? tm - ln.t : 10;
+    const end = nx ? nx.t : len, dur = Math.max(.8, Math.min(end - ln.t, 5)), T = Math.max(.4, Math.min(dur * .6, 1.6));
+    const o = { full: ln.text, kar: lyrMode === 'karaoke' };
+    if (o.kar) o.prog = Math.min(1, Math.max(0, (tm - ln.t) / dur));
+    const an = lyrAnim, kk = Math.min(1, age / .4);
+    if (an === 'fade') o.a = Math.min(1, age / .3);
+    else if (an === 'slide') { const q = Math.min(1, age / .35); o.a = Math.min(1, age / .25); o.dy = Math.pow(1 - q, 3) * 45 }
+    else if (an === 'pop') { const e = 1 + 2.70158 * Math.pow(kk - 1, 3) + 1.70158 * Math.pow(kk - 1, 2); o.sc = .6 + .4 * e; o.a = Math.min(1, age / .12) }
+    else if (an === 'type') o.vis = ln.text.slice(0, Math.ceil(ln.text.length * Math.min(1, age / T)));
+    else if (an === 'words') { const ws = ln.text.split(' '); o.vis = ws.slice(0, Math.ceil(ws.length * Math.min(1, age / T))).join(' ') }
+    drawLine(ln.text, y, base, o);
+    if (o.kar && nx && nx.text) drawLine(nx.text, y + (lyrLook === 'boxed' || lyrLook === 'highlight' ? 64 : 48), Math.max(20, base * .7), { a: .45 })
 }
-function drawSync() { const nxt = syncLines[syncIdx]; g.textAlign = 'center'; g.font = '600 22px sans-serif'; g.fillStyle = theme.d; g.fillText(nxt ? 'Tap as you sing this line' : 'All lines tapped', W / 2, 730); if (nxt) put(nxt, 775, 34, '#fff', 1) }
+function drawSync() { const nxt = syncLines[syncIdx], y = lyrY(); g.textAlign = 'center'; g.font = '600 22px sans-serif'; g.fillStyle = theme.d; g.fillText(nxt ? 'Tap as you sing this line' : 'All lines tapped', W / 2, y - 62); if (nxt) drawLine(nxt, y, 34) }
 function overlays(p) {
     const len = cur ? curLen : clipLen(), L = cur ? lyr : parseLyrics(len);
     if (style === 'insta' && $('sub').value) { g.textAlign = 'center'; g.font = `${FNT.w === 800 ? 600 : FNT.w} 26px "${FNT.f}",sans-serif`; g.fillStyle = 'rgba(255,255,255,.85)'; wrap($('sub').value, W / 2, 690, W - 100, 32) }
@@ -222,6 +254,79 @@ cbtn.onclick = () => {
 $('themes').addEventListener('click', e => { const b = e.target.closest('button'); if (b && b !== cbtn) $('custom').hidden = true });
 function hsl(h, s, l) { h = ((h % 360) + 360) % 360; s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('') }
 $('c-rand').onclick = () => { const h = Math.random() * 360; $('c-a').value = hsl(h, 55, 8); $('c-b').value = hsl(h + 20, 60, 22); $('c-c').value = hsl(h + 10, 90, 66); $('c-d').value = hsl(h + 50, 95, 76); applyCustom() };
+let recSt = null;
+const fmtT = s => { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') };
+async function startRec() {
+    if (previewing) endPreview();
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { $('fmsg').textContent = 'Recording is not supported here. Use an up-to-date browser on a secure (https) page.'; return }
+    let stream;
+    try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume();
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, autoGainControl: false, noiseSuppression: $('rec-ns').checked } });
+        await actx.resume()
+    } catch (err) { const n = err && err.name; $('fmsg').textContent = (n === 'NotAllowedError' || n === 'SecurityError') ? 'Microphone access was blocked. Allow it in your browser or site settings, then try again.' : n === 'NotFoundError' ? 'No microphone was found.' : 'Could not start the microphone.'; return }
+    const src = actx.createMediaStreamSource(stream), proc = actx.createScriptProcessor(4096, 1, 1), mute = actx.createGain();
+    mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(actx.destination);
+    const st = recSt = { stream, src, proc, mute, chunks: [], total: 0 };
+    proc.onaudioprocess = e => {
+        const d = e.inputBuffer.getChannelData(0); st.chunks.push(new Float32Array(d)); st.total += d.length;
+        let s = 0; for (let i = 0; i < d.length; i += 8)s += d[i] * d[i];
+        $('meter').firstElementChild.style.transform = `scaleX(${Math.min(1, Math.sqrt(s / (d.length / 8)) * 4)})`;
+        const secs = st.total / actx.sampleRate; $('rec-t').textContent = fmtT(secs); if (secs >= 300) stopRec()
+    };
+    $('rec').textContent = '■ Stop recording'; $('rec').classList.add('recording');
+    $('prev').disabled = $('make').disabled = $('sync').disabled = $('reset').disabled = $('file').disabled = true;
+    $('fmsg').textContent = 'Recording... sing now and press stop when you are done.'
+}
+function stopRec() {
+    const st = recSt; if (!st) return; recSt = null;
+    st.proc.onaudioprocess = null; try { st.src.disconnect(); st.proc.disconnect(); st.mute.disconnect() } catch (e) { }
+    st.stream.getTracks().forEach(t => t.stop());
+    $('rec').textContent = '● Record voice'; $('rec').classList.remove('recording');
+    $('meter').firstElementChild.style.transform = 'scaleX(0)'; $('file').disabled = false; $('reset').disabled = false; $('sync').disabled = false;
+    const n = st.chunks.reduce((a, c) => a + c.length, 0);
+    if (n < actx.sampleRate * .5) { $('rec-t').textContent = ''; $('prev').disabled = $('make').disabled = !buf; $('fmsg').textContent = 'That was too short. Please try again.'; return }
+    const ab = actx.createBuffer(1, n, actx.sampleRate), ch = ab.getChannelData(0); let o = 0; st.chunks.forEach(c => { ch.set(c, o); o += c.length });
+    buf = ab; $('file').value = '';
+    const d = Math.ceil(ab.duration); $('len').value = Math.min(90, d); $('len').max = Math.min(90, d); $('start').value = 0; $('start').max = Math.max(0, d - 1);
+    $('prev').disabled = $('make').disabled = false;
+    if (!$('title').value) $('title').value = 'My recording';
+    $('fmsg').textContent = `Recorded ${d}s.${d > 90 ? ' It is longer than 90s, so choose the part you want (max 90s).' : ' The full clip is selected. You can trim it below.'}`;
+    idle()
+}
+$('rec').onclick = () => recSt ? stopRec() : startRec();
+const sp = (id, k, v) => [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x.dataset[k] === v));
+[['lyrlook', 'l', v => lyrLook = v], ['lyranim', 'a', v => lyrAnim = v], ['lyrpos', 'p', v => lyrPos = v]].forEach(([id, k, f]) => { $(id).onclick = e => { const b = e.target.closest('button'); if (!b) return; f(b.dataset[k]); sp(id, k, b.dataset[k]); idle() } });
+bgv.muted = true;
+function coverTo(c, src, sw, sh) { const q = Math.max(W / sw, H / sh); c.drawImage(src, (W - sw * q) / 2, (H - sh * q) / 2, sw * q, sh * q) }
+function vStart() { return Math.min(Math.max(0, +$('vs').value || 0), Math.max(0, (bgv.duration || 0) - .5)) }
+function vEnd() { const d = bgv.duration || 0, e = +$('ve').value || d; return Math.min(d, Math.max(e, vStart() + .5)) }
+function snapVideo() { if (bgv.readyState >= 2 && bgv.videoWidth) { coverTo(vsnap.getContext('2d'), bgv, bgv.videoWidth, bgv.videoHeight); vHold = true } }
+function startVideo() { if (!bgVid) return; snapVideo(); bgv.currentTime = vStart(); bgv.play().catch(() => { }) }
+function syncVideo(t) {
+    if (!bgVid) return; const vs = vStart(), ve = vEnd(), seg = Math.max(.5, ve - vs), want = vs + (t % seg);
+    if (bgv.paused) bgv.play().catch(() => { });
+    if (Math.abs(bgv.currentTime - want) > .6 || bgv.currentTime >= ve) { snapVideo(); bgv.currentTime = want }
+}
+function pauseVideo() { if (!bgVid) return; snapVideo(); bgv.pause(); bgv.currentTime = vStart() }
+function clearVideo() { if (vUrl) URL.revokeObjectURL(vUrl); vUrl = null; bgVid = false; vHold = false; bgv.pause(); bgv.removeAttribute('src'); bgv.load(); $('vctl').hidden = true; $('bgvf').value = ''; $('vmsg').textContent = 'Shorter than the clip? It loops. Its own sound is not used.' }
+$('bgvf').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (vUrl) URL.revokeObjectURL(vUrl); vUrl = URL.createObjectURL(f); vHold = false; $('vmsg').textContent = 'Loading video...';
+    bgv.onerror = () => { clearVideo(); $('vmsg').textContent = 'Could not read that video. Try an MP4 (H.264).' };
+    bgv.onloadedmetadata = () => {
+        const d = bgv.duration; if (!isFinite(d) || d < .5) { clearVideo(); $('vmsg').textContent = 'Could not read that video. Try an MP4 (H.264).'; return }
+        bgVid = true; $('vs').value = 0; $('ve').value = +d.toFixed(1); $('vs').max = $('ve').max = +d.toFixed(1); $('vctl').hidden = false;
+        $('vmsg').textContent = `Video loaded (${d.toFixed(1)}s). If it is shorter than your clip it loops, and if it is longer only the part that fits is used. Set the start and end below to pick a section.`;
+        bgv.currentTime = Math.min(.05, d / 2)
+    };
+    bgv.src = vUrl; bgv.load()
+};
+bgv.addEventListener('loadeddata', () => { if (!cur) idle() });
+bgv.addEventListener('seeked', () => { if (!cur) idle() });
+$('vs').onchange = $('ve').onchange = () => { if (bgVid && !cur) bgv.currentTime = vStart() };
+$('vdim').oninput = () => { $('vdim-o').textContent = $('vdim').value + '%'; idle() };
+$('vrm').onclick = () => { clearVideo(); idle() };
 document.fonts.ready.then(idle); idle();
 $('x').onclick = $('back').onclick = () => $('done').close();
 function resetAll() {
@@ -230,7 +335,7 @@ function resetAll() {
     $('fmsg').textContent = 'MP3, WAV, M4A or similar.'; $('msg').textContent = '';
     $('prev').textContent = 'Preview'; $('prev').disabled = $('make').disabled = true;
     if ($('done').open) $('done').close(); $('vid').removeAttribute('src'); $('vid').load();
-    theme = THEMES[0]; style = 'bars'; FNT = FONTS[0]; $('vol').value = 100; $('bass').value = 0; $('fin').value = 0; $('fout').value = 0; $('loud').checked = false; syncOut(); $('lyr').value = ''; $('sub').value = ''; syncing = false; $('custom').hidden = true; customInit = false; bgMode = 'none'; lyrMode = 'karaoke';[...$('bganim').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));[...$('lyrmode').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.m === 'karaoke')); updSyncBtn();
+    theme = THEMES[0]; style = 'bars'; FNT = FONTS[0]; $('vol').value = 100; $('bass').value = 0; $('fin').value = 0; $('fout').value = 0; $('loud').checked = false; syncOut(); $('lyr').value = ''; $('sub').value = ''; syncing = false; $('custom').hidden = true; customInit = false; $('rec-t').textContent = ''; clearVideo(); $('vdim').value = 35; $('vdim-o').textContent = '35%'; lyrLook = 'classic'; lyrAnim = 'fade'; lyrPos = 'bottom'; sp('lyrlook', 'l', 'classic'); sp('lyranim', 'a', 'fade'); sp('lyrpos', 'p', 'bottom'); bgMode = 'none'; lyrMode = 'karaoke';[...$('bganim').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));[...$('lyrmode').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.m === 'karaoke')); updSyncBtn();
     [...$('themes').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));
     [...$('styles').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.v === 'bars'));
     [...$('fonts').children].forEach((x, i) => x.setAttribute('aria-pressed', i == 0));

@@ -702,3 +702,73 @@ textarea:focus {
         grid-template-columns: 1fr
     }
 }
+
+.rec {
+    display: flex;
+    align-items: center;
+    gap: 10px 14px;
+    flex-wrap: wrap;
+    margin-top: 12px
+}
+
+.rec .btn {
+    flex: 0 0 auto
+}
+
+.rec .tm {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700
+}
+
+.rec .chk {
+    margin: 0;
+    font-size: .85rem
+}
+
+.meter {
+    flex-basis: 100%;
+    height: 6px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    overflow: hidden
+}
+
+.meter i {
+    display: block;
+    height: 100%;
+    width: 100%;
+    transform-origin: left;
+    transform: scaleX(0);
+    background: linear-gradient(90deg, var(--acc), #ffb347);
+    transition: transform .08s
+}
+
+.btn.recording {
+    background: #e5303c;
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 12px 28px -12px #e5303c;
+    animation: rp 1.2s infinite
+}
+
+@keyframes rp {
+    50% {
+        opacity: .75
+    }
+}
+
+@media(prefers-reduced-motion:reduce) {
+    .btn.recording {
+        animation: none
+    }
+}
+
+#vctl {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px
+}
+
+#vctl[hidden] {
+    display: none
+}
